@@ -92,10 +92,10 @@ export function TimecodeStrip({
 
   return (
     <div className="border border-border bg-card">
-      <div className="grid grid-cols-2 divide-y divide-border sm:grid-cols-4 sm:divide-x sm:divide-y-0 lg:flex lg:min-h-[4.5rem] lg:items-stretch">
+      <div className="grid grid-cols-2 divide-x divide-y divide-border sm:grid-cols-4 sm:divide-y-0">
         {fields.map((field) => (
           <div
-            className="flex min-w-0 flex-col justify-center px-4 py-3 sm:border-border lg:flex-1 lg:border-r"
+            className="flex min-w-0 flex-col justify-center px-4 py-3"
             key={field.key}
           >
             <span className="font-mono text-[10px] tracking-[0.2em] text-muted-foreground uppercase">
@@ -111,39 +111,39 @@ export function TimecodeStrip({
             </span>
           </div>
         ))}
+      </div>
 
-        <div className="col-span-2 flex min-h-14 items-center justify-between gap-2 border-t border-border px-4 py-3 sm:col-span-4 lg:min-w-0 lg:flex-1 lg:border-t-0 lg:border-l">
-          <div className="flex h-8 min-w-[5.625rem] items-center">
-            {onClearBox ? (
-              <Button
-                className="h-8 font-mono text-xs tracking-wide uppercase"
-                onClick={onClearBox}
-                size="sm"
-                type="button"
-                variant="outline"
-              >
-                Clear box
-              </Button>
-            ) : (
-              <span className="font-mono text-xs text-muted-foreground">
-                {actionHint}
-              </span>
-            )}
-          </div>
+      <div className="flex min-h-14 items-center justify-between gap-2 border-t border-border px-4 py-3">
+        <div className="flex h-8 min-w-[5.625rem] items-center">
+          {onClearBox ? (
+            <Button
+              className="h-8 font-mono text-xs tracking-wide uppercase"
+              onClick={onClearBox}
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              Clear box
+            </Button>
+          ) : (
+            <span className="font-mono text-xs text-muted-foreground">
+              {actionHint}
+            </span>
+          )}
+        </div>
 
-          <div className="flex h-8 items-center gap-2">
-            {copyBox ? (
-              <>
-                <CopyBboxButton box={copyBox} />
-                <CopyBboxButton asJson box={copyBox} />
-              </>
-            ) : (
-              <>
-                <span aria-hidden className="inline-block h-8 w-[6.75rem]" />
-                <span aria-hidden className="inline-block h-8 w-[4.25rem]" />
-              </>
-            )}
-          </div>
+        <div className="flex h-8 items-center gap-2">
+          {copyBox ? (
+            <>
+              <CopyBboxButton box={copyBox} />
+              <CopyBboxButton asJson box={copyBox} />
+            </>
+          ) : (
+            <>
+              <span aria-hidden className="inline-block h-8 w-[6.75rem]" />
+              <span aria-hidden className="inline-block h-8 w-[4.25rem]" />
+            </>
+          )}
         </div>
       </div>
     </div>

@@ -35,6 +35,32 @@ function clampIndex(value: number, maxExclusive: number): number {
   return Math.min(Math.floor(value), Math.max(maxExclusive - 1, 0))
 }
 
+function formatLabelFromName(name: string): "ND2" | "CZI" | null {
+  const lower = name.toLowerCase()
+  if (lower.endsWith(".nd2")) {
+    return "ND2"
+  }
+  if (lower.endsWith(".czi")) {
+    return "CZI"
+  }
+  return null
+}
+
+function positionLabelFromName(name: string): string {
+  return formatLabelFromName(name) === "CZI" ? "Scene (S)" : AXIS_LABELS.position
+}
+
+function displayNameFromFile(name: string): string {
+  const lower = name.toLowerCase()
+  if (lower.endsWith(".nd2")) {
+    return name.slice(0, -4)
+  }
+  if (lower.endsWith(".czi")) {
+    return name.slice(0, -4)
+  }
+  return name
+}
+
 export function MicroscopyFrameDialog({
   file,
   onClose,
@@ -49,6 +75,7 @@ export function MicroscopyFrameDialog({
     z: "0",
   })
   const [loading, setLoading] = useState(false)
+  const [inspecting, setInspecting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const closeOpenedHandle = async () => {
@@ -70,8 +97,11 @@ export function MicroscopyFrameDialog({
     }
 
     let cancelled = false
+    setInspecting(true)
     setLoading(true)
     setError(null)
+    setOpened(null)
+    openedRef.current = null
 
     void inspectMicroscopyFile(file)
       .then((result) => {
@@ -93,6 +123,7 @@ export function MicroscopyFrameDialog({
       })
       .finally(() => {
         if (!cancelled) {
+          setInspecting(false)
           setLoading(false)
         }
       })
@@ -108,8 +139,11 @@ export function MicroscopyFrameDialog({
   }
 
   const summary = opened?.summary
-  const positionLabel =
-    opened?.format === "czi" ? "Scene (S)" : AXIS_LABELS.position
+  const formatLabel = formatLabelFromName(file.name)
+  const positionLabel = positionLabelFromName(file.name)
+  const summaryText = summary
+    ? `P=${summary.n_pos} · T=${summary.n_time} · C=${summary.n_chan} · Z=${summary.n_z} · ${summary.width}×${summary.height}`
+    : null
 
   const handleClose = () => {
     void closeOpenedHandle().finally(onClose)
@@ -159,17 +193,21 @@ export function MicroscopyFrameDialog({
             Choose frame coordinates
           </h2>
           <p className="font-mono text-xs text-muted-foreground">
-            {file.name}
-            {opened ? ` · ${opened.format.toUpperCase()}` : null}
+            {displayNameFromFile(file.name)}
+            {formatLabel ? ` · ${formatLabel}` : null}
           </p>
         </div>
 
-        {summary ? (
-          <p className="mt-4 font-mono text-[11px] tracking-[0.12em] text-muted-foreground uppercase">
-            P={summary.n_pos} · T={summary.n_time} · C={summary.n_chan} · Z=
-            {summary.n_z} · {summary.width}×{summary.height}
-          </p>
-        ) : null}
+        <p
+          aria-live="polite"
+          className="mt-4 min-h-5 font-mono text-[11px] tracking-[0.12em] text-muted-foreground uppercase"
+        >
+          {summaryText ?? (
+            <span className="text-muted-foreground/50">
+              {inspecting ? "Reading metadata…" : "\u00a0"}
+            </span>
+          )}
+        </p>
 
         <div className="mt-5 grid grid-cols-2 gap-3">
           {(["position", "time", "channel", "z"] as const).map((axis) => (
@@ -221,6 +259,7 @@ export function MicroscopyFrameDialog({
             Cancel
           </Button>
           <Button
+            className="min-w-[7.5rem]"
             disabled={loading || !opened}
             onClick={() => {
               void handleSubmit()
