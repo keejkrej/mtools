@@ -1,25 +1,31 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
-import {
-  closeMicroscopyFile,
-  type OpenMicroscopyFileResult,
-} from "@mtools/mdat-wasm"
-import type { ImageAsset } from "@mtools/contracts"
+import { useId, useState } from "react"
+import type { OpenMicroscopyFileResult } from "@mtools/mdat-wasm"
+import type { ImageAsset, MicroscopyFrame } from "@mtools/contracts"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import {
-  inspectMicroscopyFile,
+  clampAxisValue,
+  FrameAxisSpinbox,
+} from "@/components/frame-axis-spinbox"
+import {
+  displayNameFromFile,
+  formatLabelFromName,
   loadMicroscopyFrameImage,
+  positionLabelFromFormat,
 } from "@/services/microscopy"
 
 type MicroscopyFrameDialogProps = {
-  file: File | null
+  opened: OpenMicroscopyFileResult
+  initialCoords?: MicroscopyFrame
+  submitLabel?: string
   onClose: () => void
   onOpen: (image: ImageAsset) => void
 }
 
 type AxisField = "position" | "time" | "channel" | "z"
+
+type AxisCoords = Record<AxisField, number>
 
 const AXIS_LABELS: Record<AxisField, string> = {
   position: "Position",
@@ -28,146 +34,57 @@ const AXIS_LABELS: Record<AxisField, string> = {
   z: "Z",
 }
 
-function clampIndex(value: number, maxExclusive: number): number {
-  if (!Number.isFinite(value) || value < 0) {
-    return 0
+function axisMax(
+  summary: OpenMicroscopyFileResult["summary"],
+  axis: AxisField,
+): number {
+  const counts: Record<AxisField, number> = {
+    position: summary.n_pos,
+    time: summary.n_time,
+    channel: summary.n_chan,
+    z: summary.n_z,
   }
-  return Math.min(Math.floor(value), Math.max(maxExclusive - 1, 0))
+  return Math.max(counts[axis] - 1, 0)
 }
 
-function formatLabelFromName(name: string): "ND2" | "CZI" | null {
-  const lower = name.toLowerCase()
-  if (lower.endsWith(".nd2")) {
-    return "ND2"
+function coordsFromFrame(
+  summary: OpenMicroscopyFileResult["summary"],
+  frame?: MicroscopyFrame,
+): AxisCoords {
+  return {
+    position: clampAxisValue(frame?.position ?? 0, axisMax(summary, "position")),
+    time: clampAxisValue(frame?.time ?? 0, axisMax(summary, "time")),
+    channel: clampAxisValue(frame?.channel ?? 0, axisMax(summary, "channel")),
+    z: clampAxisValue(frame?.z ?? 0, axisMax(summary, "z")),
   }
-  if (lower.endsWith(".czi")) {
-    return "CZI"
-  }
-  return null
-}
-
-function positionLabelFromName(name: string): string {
-  return formatLabelFromName(name) === "CZI" ? "Scene (S)" : AXIS_LABELS.position
-}
-
-function displayNameFromFile(name: string): string {
-  const lower = name.toLowerCase()
-  if (lower.endsWith(".nd2")) {
-    return name.slice(0, -4)
-  }
-  if (lower.endsWith(".czi")) {
-    return name.slice(0, -4)
-  }
-  return name
 }
 
 export function MicroscopyFrameDialog({
-  file,
+  opened,
+  initialCoords,
+  submitLabel = "Open frame",
   onClose,
   onOpen,
 }: MicroscopyFrameDialogProps) {
-  const [opened, setOpened] = useState<OpenMicroscopyFileResult | null>(null)
-  const openedRef = useRef<OpenMicroscopyFileResult | null>(null)
-  const [coords, setCoords] = useState({
-    position: "0",
-    time: "0",
-    channel: "0",
-    z: "0",
-  })
+  const { summary } = opened
+  const fieldIdPrefix = useId()
+  const [coords, setCoords] = useState<AxisCoords>(() =>
+    coordsFromFrame(summary, initialCoords),
+  )
   const [loading, setLoading] = useState(false)
-  const [inspecting, setInspecting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const closeOpenedHandle = async () => {
-    const current = openedRef.current
-    openedRef.current = null
-    setOpened(null)
-    if (current) {
-      await closeMicroscopyFile(current.handle)
-    }
-  }
-
-  useEffect(() => {
-    openedRef.current = opened
-  }, [opened])
-
-  useEffect(() => {
-    if (!file) {
-      return
-    }
-
-    let cancelled = false
-    setInspecting(true)
-    setLoading(true)
-    setError(null)
-    setOpened(null)
-    openedRef.current = null
-
-    void inspectMicroscopyFile(file)
-      .then((result) => {
-        if (cancelled) {
-          void closeMicroscopyFile(result.handle)
-          return
-        }
-        openedRef.current = result
-        setOpened(result)
-      })
-      .catch((cause) => {
-        if (!cancelled) {
-          setError(
-            cause instanceof Error
-              ? cause.message
-              : "Could not inspect microscopy file",
-          )
-        }
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setInspecting(false)
-          setLoading(false)
-        }
-      })
-
-    return () => {
-      cancelled = true
-      void closeOpenedHandle()
-    }
-  }, [file])
-
-  if (!file) {
-    return null
-  }
-
-  const summary = opened?.summary
-  const formatLabel = formatLabelFromName(file.name)
-  const positionLabel = positionLabelFromName(file.name)
-  const summaryText = summary
-    ? `P=${summary.n_pos} · T=${summary.n_time} · C=${summary.n_chan} · Z=${summary.n_z} · ${summary.width}×${summary.height}`
-    : null
-
-  const handleClose = () => {
-    void closeOpenedHandle().finally(onClose)
-  }
+  const formatLabel = formatLabelFromName(opened.name)
+  const positionLabel = positionLabelFromFormat(opened.format)
+  const summaryText = `P=${summary.n_pos} · T=${summary.n_time} · C=${summary.n_chan} · Z=${summary.n_z} · ${summary.width}×${summary.height}`
 
   const handleSubmit = async () => {
-    if (!opened || !summary) {
-      return
-    }
-
     setLoading(true)
     setError(null)
 
     try {
-      const image = await loadMicroscopyFrameImage(opened, {
-        position: clampIndex(Number(coords.position), summary.n_pos),
-        time: clampIndex(Number(coords.time), summary.n_time),
-        channel: clampIndex(Number(coords.channel), summary.n_chan),
-        z: clampIndex(Number(coords.z), summary.n_z),
-      })
-      openedRef.current = null
-      setOpened(null)
+      const image = await loadMicroscopyFrameImage(opened, coords)
       onOpen(image)
-      onClose()
     } catch (cause) {
       setError(
         cause instanceof Error ? cause.message : "Could not read microscopy frame",
@@ -193,51 +110,30 @@ export function MicroscopyFrameDialog({
             Choose frame coordinates
           </h2>
           <p className="font-mono text-xs text-muted-foreground">
-            {displayNameFromFile(file.name)}
+            {displayNameFromFile(opened.name)}
             {formatLabel ? ` · ${formatLabel}` : null}
           </p>
         </div>
 
-        <p
-          aria-live="polite"
-          className="mt-4 min-h-5 font-mono text-[11px] tracking-[0.12em] text-muted-foreground uppercase"
-        >
-          {summaryText ?? (
-            <span className="text-muted-foreground/50">
-              {inspecting ? "Reading metadata…" : "\u00a0"}
-            </span>
-          )}
+        <p className="mt-4 font-mono text-[11px] tracking-[0.12em] text-muted-foreground uppercase">
+          {summaryText}
         </p>
 
         <div className="mt-5 grid grid-cols-2 gap-3">
           {(["position", "time", "channel", "z"] as const).map((axis) => (
-            <label key={axis} className="space-y-1.5">
-              <span className="font-mono text-[11px] tracking-[0.12em] text-muted-foreground uppercase">
-                {axis === "position" ? positionLabel : AXIS_LABELS[axis]}
-              </span>
-              <Input
-                inputMode="numeric"
-                min={0}
-                max={
-                  summary
-                    ? {
-                        position: summary.n_pos - 1,
-                        time: summary.n_time - 1,
-                        channel: summary.n_chan - 1,
-                        z: summary.n_z - 1,
-                      }[axis]
-                    : undefined
-                }
-                nativeInput
-                onChange={(event) => {
-                  setCoords((current) => ({
-                    ...current,
-                    [axis]: event.target.value,
-                  }))
-                }}
-                value={coords[axis]}
-              />
-            </label>
+            <FrameAxisSpinbox
+              id={`${fieldIdPrefix}-${axis}`}
+              key={axis}
+              label={axis === "position" ? positionLabel : AXIS_LABELS[axis]}
+              max={axisMax(summary, axis)}
+              onChange={(value) => {
+                setCoords((current) => ({
+                  ...current,
+                  [axis]: value,
+                }))
+              }}
+              value={coords[axis]}
+            />
           ))}
         </div>
 
@@ -250,9 +146,7 @@ export function MicroscopyFrameDialog({
         <div className="mt-6 flex justify-end gap-2">
           <Button
             disabled={loading}
-            onClick={() => {
-              void handleClose()
-            }}
+            onClick={onClose}
             type="button"
             variant="outline"
           >
@@ -260,13 +154,13 @@ export function MicroscopyFrameDialog({
           </Button>
           <Button
             className="min-w-[7.5rem]"
-            disabled={loading || !opened}
+            disabled={loading}
             onClick={() => {
               void handleSubmit()
             }}
             type="button"
           >
-            {loading ? "Loading…" : "Open frame"}
+            {loading ? "Loading…" : submitLabel}
           </Button>
         </div>
       </div>

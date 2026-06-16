@@ -9,6 +9,7 @@ import {
 } from "@/atoms/annotator"
 import { BboxCanvas } from "@/components/bbox-canvas"
 import { MicroscopyFrameDialog } from "@/components/microscopy-frame-dialog"
+import { MicroscopyInspectOverlay } from "@/components/microscopy-inspect-overlay"
 import { TimecodeStrip } from "@/components/copy-bbox-button"
 import { Button } from "@/components/ui/button"
 import {
@@ -18,16 +19,31 @@ import {
   revokeImageUrl,
   saveAnnotatorSession,
 } from "@/services/annotator"
-import { isMicroscopyFileName } from "@/services/microscopy"
+import {
+  closeInspectedMicroscopyFile,
+  inspectMicroscopyFile,
+  isMicroscopyFileName,
+} from "@/services/microscopy"
 import { cn } from "@/lib/utils"
+import type { ImageAsset, MicroscopyFrame } from "@mtools/contracts"
+import type { OpenMicroscopyFileResult } from "@mtools/mdat-wasm"
+
+type MicroscopyDialogMode = "open" | "change"
 
 export function AnnotatorPage() {
   const [state, dispatch] = useReducer(annotatorReducer, initialAnnotatorState)
   const [sessionReady, setSessionReady] = useState(false)
-  const [pendingMicroscopyFile, setPendingMicroscopyFile] = useState<File | null>(
-    null,
-  )
+  const [inspectedMicroscopy, setInspectedMicroscopy] =
+    useState<OpenMicroscopyFileResult | null>(null)
+  const [inspectingMicroscopyFileName, setInspectingMicroscopyFileName] =
+    useState<string | null>(null)
+  const [microscopyDialogMode, setMicroscopyDialogMode] =
+    useState<MicroscopyDialogMode>("open")
+  const [microscopyInitialCoords, setMicroscopyInitialCoords] =
+    useState<MicroscopyFrame | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const microscopyRequestRef = useRef(0)
+  const microscopySourceFileRef = useRef<File | null>(null)
 
   useEffect(() => {
     void loadAnnotatorSession().then((session) => {
@@ -60,8 +76,71 @@ export function AnnotatorPage() {
     void clearAnnotatorSession()
   }, [sessionReady, state.image, state.bbox])
 
+  const resetFileInput = () => {
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ""
+    }
+  }
+
   const openFilePicker = () => {
     fileInputRef.current?.click()
+  }
+
+  const cancelMicroscopyFlow = async (
+    opened?: OpenMicroscopyFileResult | null,
+    options?: { resetInput?: boolean },
+  ) => {
+    microscopyRequestRef.current += 1
+    setInspectingMicroscopyFileName(null)
+    setMicroscopyInitialCoords(null)
+    setMicroscopyDialogMode("open")
+
+    if (opened) {
+      await closeInspectedMicroscopyFile(opened)
+    }
+
+    setInspectedMicroscopy(null)
+
+    if (options?.resetInput !== false) {
+      resetFileInput()
+    }
+  }
+
+  const openMicroscopyFile = async (
+    file: File,
+    options?: {
+      initialCoords?: MicroscopyFrame
+      mode?: MicroscopyDialogMode
+    },
+  ) => {
+    const requestId = microscopyRequestRef.current + 1
+    microscopyRequestRef.current = requestId
+    microscopySourceFileRef.current = file
+    setMicroscopyDialogMode(options?.mode ?? "open")
+    setMicroscopyInitialCoords(options?.initialCoords ?? null)
+    setInspectedMicroscopy(null)
+    setInspectingMicroscopyFileName(file.name)
+
+    try {
+      const opened = await inspectMicroscopyFile(file)
+      if (requestId !== microscopyRequestRef.current) {
+        await closeInspectedMicroscopyFile(opened)
+        return
+      }
+      setInspectingMicroscopyFileName(null)
+      setInspectedMicroscopy(opened)
+    } catch (error) {
+      if (requestId !== microscopyRequestRef.current) {
+        return
+      }
+      setInspectingMicroscopyFileName(null)
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Could not inspect microscopy file"
+      dispatch({ type: "image-error", message })
+      resetFileInput()
+    }
   }
 
   const handleOpenImage = async (file: File | undefined) => {
@@ -70,7 +149,7 @@ export function AnnotatorPage() {
     }
 
     if (isMicroscopyFileName(file.name)) {
-      setPendingMicroscopyFile(file)
+      await openMicroscopyFile(file)
       return
     }
 
@@ -92,12 +171,46 @@ export function AnnotatorPage() {
     if (state.image) {
       await revokeImageUrl(state.image.url)
     }
+    microscopySourceFileRef.current = null
     await clearAnnotatorSession()
     dispatch({ type: "clear-image" })
     if (fileInputRef.current) {
       fileInputRef.current.value = ""
     }
   }
+
+  const handleMicroscopyFrameOpen = async (image: ImageAsset) => {
+    if (state.image) {
+      await revokeImageUrl(state.image.url)
+    }
+    setInspectedMicroscopy(null)
+    setMicroscopyInitialCoords(null)
+
+    if (microscopyDialogMode === "change") {
+      dispatch({ type: "microscopy-frame-loaded", image })
+      return
+    }
+
+    dispatch({ type: "image-loaded", image })
+    resetFileInput()
+  }
+
+  const reopenMicroscopyFramePicker = () => {
+    const sourceFile = microscopySourceFileRef.current
+    const frame = state.image?.frame
+    if (!sourceFile || !frame) {
+      return
+    }
+
+    void openMicroscopyFile(sourceFile, {
+      initialCoords: frame,
+      mode: "change",
+    })
+  }
+
+  const canChangeMicroscopyFrame = Boolean(
+    state.image?.frame && microscopySourceFileRef.current,
+  )
 
   const liveBox = activeBoundingBox(state)
   const status = state.draft
@@ -122,7 +235,7 @@ export function AnnotatorPage() {
       />
 
       <header className="z-10 shrink-0 border-b border-border/80 bg-background/90 backdrop-blur-md">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-5 py-4 sm:px-8">
+        <div className="mx-auto grid max-w-6xl grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-4 px-5 py-4 sm:px-8">
           <div className="flex min-w-0 items-baseline gap-3">
             <h1 className="font-display text-xl leading-normal sm:text-2xl">
               mTools
@@ -132,15 +245,32 @@ export function AnnotatorPage() {
             </span>
           </div>
 
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="flex min-w-0 justify-center px-2">
             {state.image ? (
-              <p className="mr-2 hidden max-w-[14rem] truncate font-mono text-xs text-muted-foreground lg:block">
-                {state.image.name}
-                <span className="mx-1.5 text-border">·</span>
-                {state.image.width}×{state.image.height}
-              </p>
+              canChangeMicroscopyFrame ? (
+                <Button
+                  aria-label="Change frame coordinates"
+                  className="h-auto min-w-0 max-w-full truncate px-2 py-1 font-mono text-xs text-muted-foreground hover:bg-transparent hover:text-foreground"
+                  onClick={reopenMicroscopyFramePicker}
+                  size="sm"
+                  type="button"
+                  variant="ghost"
+                >
+                  {state.image.name}
+                  <span className="mx-1.5 text-border">·</span>
+                  {state.image.width}×{state.image.height}
+                </Button>
+              ) : (
+                <p className="max-w-full truncate text-center font-mono text-xs text-muted-foreground">
+                  {state.image.name}
+                  <span className="mx-1.5 text-border">·</span>
+                  {state.image.width}×{state.image.height}
+                </p>
+              )
             ) : null}
+          </div>
 
+          <div className="flex shrink-0 items-center justify-end gap-2">
             <Button onClick={openFilePicker} size="sm" type="button">
               <ImageIcon data-icon="inline-start" />
               Open image
@@ -193,7 +323,7 @@ export function AnnotatorPage() {
           </span>
         </div>
 
-        <div className="min-h-0 flex-1">
+        <div className="mb-4 min-h-0 flex-1">
           <BboxCanvas
             onDrawEnd={() => dispatch({ type: "draw-end" })}
             onDrawMove={(x, y) => dispatch({ type: "draw-move", x, y })}
@@ -221,25 +351,35 @@ export function AnnotatorPage() {
             }
           />
         </div>
-
-        <p className="mt-4 shrink-0 text-center text-xs text-muted-foreground">
-          Coordinates are in original image pixels — x, y, width, height.
-          Session restores on reload within this tab.
-        </p>
       </main>
 
-      <MicroscopyFrameDialog
-        file={pendingMicroscopyFile}
-        onClose={() => {
-          setPendingMicroscopyFile(null)
-        }}
-        onOpen={(image) => {
-          if (state.image) {
-            void revokeImageUrl(state.image.url)
+      {inspectingMicroscopyFileName ? (
+        <MicroscopyInspectOverlay
+          fileName={inspectingMicroscopyFileName}
+          onCancel={() => {
+            void cancelMicroscopyFlow()
+          }}
+        />
+      ) : null}
+
+      {inspectedMicroscopy ? (
+        <MicroscopyFrameDialog
+          initialCoords={microscopyInitialCoords ?? undefined}
+          key={`${inspectedMicroscopy.handle}-${microscopyDialogMode}`}
+          opened={inspectedMicroscopy}
+          onClose={() => {
+            void cancelMicroscopyFlow(inspectedMicroscopy, {
+              resetInput: microscopyDialogMode === "open",
+            })
+          }}
+          onOpen={(image) => {
+            void handleMicroscopyFrameOpen(image)
+          }}
+          submitLabel={
+            microscopyDialogMode === "change" ? "Apply frame" : "Open frame"
           }
-          dispatch({ type: "image-loaded", image })
-        }}
-      />
+        />
+      ) : null}
     </div>
   )
 }

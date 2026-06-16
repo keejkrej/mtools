@@ -24,6 +24,7 @@ export const initialAnnotatorState: AnnotatorState = {
 
 export type AnnotatorAction =
   | { type: "image-loaded"; image: ImageAsset }
+  | { type: "microscopy-frame-loaded"; image: ImageAsset }
   | { type: "restore-session"; image: ImageAsset; bbox: BoundingBox | null }
   | { type: "image-error"; message: string }
   | { type: "clear-image" }
@@ -44,6 +45,20 @@ export function annotatorReducer(
         draft: null,
         error: null,
       }
+    case "microscopy-frame-loaded": {
+      const keepBbox =
+        state.bbox !== null &&
+        state.image !== null &&
+        state.image.width === action.image.width &&
+        state.image.height === action.image.height
+
+      return {
+        image: action.image,
+        bbox: keepBbox ? state.bbox : null,
+        draft: null,
+        error: null,
+      }
+    }
     case "restore-session":
       return {
         image: action.image,
