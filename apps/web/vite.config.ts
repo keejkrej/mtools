@@ -9,6 +9,10 @@ export default defineConfig({
     react(),
     tailwindcss(),
   ],
+  assetsInclude: ["**/*.wasm"],
+  optimizeDeps: {
+    exclude: ["@mtools/mdat-wasm"],
+  },
   resolve: {
     alias: {
       "@": new URL("./src", import.meta.url).pathname,

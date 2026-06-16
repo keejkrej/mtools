@@ -2,10 +2,12 @@ services:
   - type: web
     name: mtools
     runtime: static
-    buildCommand: bun install && bun run build
+    branch: deploy
+    buildCommand: echo "Serving prebuilt assets from deploy branch"
     staticPublishPath: apps/web/dist
     previews:
       generation: automatic
+      branch: main
     buildFilter:
       paths:
         - apps/web/**

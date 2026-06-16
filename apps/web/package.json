@@ -12,6 +12,7 @@
     "@base-ui/react": "^1.5.0",
     "@mtools/client": "workspace:*",
     "@mtools/contracts": "workspace:*",
+    "@mtools/mdat-wasm": "workspace:*",
     "@mtools/utils": "workspace:*",
     "effect": "beta",
     "@tanstack/react-router": "^1.120.0",

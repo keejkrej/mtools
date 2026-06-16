@@ -9,11 +9,22 @@ export const BoundingBox = Schema.Struct({
 
 export type BoundingBox = typeof BoundingBox.Type
 
+export const MicroscopyFrame = Schema.Struct({
+  format: Schema.Literals(["nd2", "czi"]),
+  position: Schema.Number,
+  time: Schema.Number,
+  channel: Schema.Number,
+  z: Schema.Number,
+})
+
+export type MicroscopyFrame = typeof MicroscopyFrame.Type
+
 export const ImageAsset = Schema.Struct({
   url: Schema.String,
   name: Schema.String,
   width: Schema.Number,
   height: Schema.Number,
+  frame: Schema.optional(MicroscopyFrame),
 })
 
 export type ImageAsset = typeof ImageAsset.Type

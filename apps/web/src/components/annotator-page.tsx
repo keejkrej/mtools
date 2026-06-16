@@ -8,6 +8,7 @@ import {
   initialAnnotatorState,
 } from "@/atoms/annotator"
 import { BboxCanvas } from "@/components/bbox-canvas"
+import { MicroscopyFrameDialog } from "@/components/microscopy-frame-dialog"
 import { TimecodeStrip } from "@/components/copy-bbox-button"
 import { Button } from "@/components/ui/button"
 import {
@@ -17,11 +18,15 @@ import {
   revokeImageUrl,
   saveAnnotatorSession,
 } from "@/services/annotator"
+import { isMicroscopyFileName } from "@/services/microscopy"
 import { cn } from "@/lib/utils"
 
 export function AnnotatorPage() {
   const [state, dispatch] = useReducer(annotatorReducer, initialAnnotatorState)
   const [sessionReady, setSessionReady] = useState(false)
+  const [pendingMicroscopyFile, setPendingMicroscopyFile] = useState<File | null>(
+    null,
+  )
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -64,6 +69,11 @@ export function AnnotatorPage() {
       return
     }
 
+    if (isMicroscopyFileName(file.name)) {
+      setPendingMicroscopyFile(file)
+      return
+    }
+
     if (state.image) {
       await revokeImageUrl(state.image.url)
     }
@@ -101,7 +111,7 @@ export function AnnotatorPage() {
   return (
     <div className="flex h-svh flex-col overflow-hidden">
       <input
-        accept="image/*"
+        accept="image/*,.nd2,.czi"
         className="sr-only"
         id="image-file"
         onChange={(event) => {
@@ -217,6 +227,19 @@ export function AnnotatorPage() {
           Session restores on reload within this tab.
         </p>
       </main>
+
+      <MicroscopyFrameDialog
+        file={pendingMicroscopyFile}
+        onClose={() => {
+          setPendingMicroscopyFile(null)
+        }}
+        onOpen={(image) => {
+          if (state.image) {
+            void revokeImageUrl(state.image.url)
+          }
+          dispatch({ type: "image-loaded", image })
+        }}
+      />
     </div>
   )
 }

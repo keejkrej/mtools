@@ -4,6 +4,7 @@
   "workspaces": ["apps/*", "packages/*"],
   "scripts": {
     "prepare": "sh scripts/prepare-effect.sh",
+    "sync:mdat-wasm": "sh scripts/sync-mdat-wasm.sh",
     "dev": "bun run --filter @mtools/web dev",
     "build": "bun run --filter @mtools/web build",
     "typecheck": "bun run --filter @mtools/web typecheck"

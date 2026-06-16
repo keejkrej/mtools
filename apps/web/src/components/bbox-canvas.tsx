@@ -5,6 +5,7 @@ import { ImagePlusIcon } from "lucide-react"
 import type { AnnotatorState } from "@/atoms/annotator"
 import { activeBoundingBox } from "@/atoms/annotator"
 import { imagePointFromClient } from "@mtools/utils"
+import { isMicroscopyFileName } from "@/services/microscopy"
 import { cn } from "@/lib/utils"
 
 type BboxCanvasProps = {
@@ -16,8 +17,10 @@ type BboxCanvasProps = {
   onDrawEnd: () => void
 }
 
-function imageFileFromTransfer(transfer: DataTransfer): File | undefined {
-  return [...transfer.files].find((file) => file.type.startsWith("image/"))
+function fileFromTransfer(transfer: DataTransfer): File | undefined {
+  return [...transfer.files].find(
+    (file) => file.type.startsWith("image/") || isMicroscopyFileName(file.name),
+  )
 }
 
 export function BboxCanvas({
@@ -76,7 +79,7 @@ export function BboxCanvas({
     dragDepthRef.current = 0
     setIsDraggingOver(false)
 
-    const file = imageFileFromTransfer(event.dataTransfer)
+    const file = fileFromTransfer(event.dataTransfer)
     if (file) {
       onDropImage(file)
     }
