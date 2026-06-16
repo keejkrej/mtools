@@ -1,0 +1,19 @@
+{
+  "name": "@mtools/client",
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@mtools/contracts": "workspace:*",
+    "@mtools/storage": "workspace:*",
+    "effect": "beta"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0"
+  }
+}

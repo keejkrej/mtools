@@ -1,0 +1,14 @@
+{
+  "name": "mtools",
+  "private": true,
+  "workspaces": ["apps/*", "packages/*"],
+  "scripts": {
+    "prepare": "sh scripts/prepare-effect.sh",
+    "dev": "bun run --filter @mtools/web dev",
+    "build": "bun run --filter @mtools/web build",
+    "typecheck": "bun run --filter @mtools/web typecheck"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0"
+  }
+}
