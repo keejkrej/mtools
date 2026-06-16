@@ -1,6 +1,6 @@
 "use client"
 
-import { useRef } from "react"
+import { useRef, useState } from "react"
 import { ImagePlusIcon } from "lucide-react"
 import type { AnnotatorState } from "@/atoms/annotator"
 import { activeBoundingBox } from "@/atoms/annotator"
@@ -10,19 +10,27 @@ import { cn } from "@/lib/utils"
 type BboxCanvasProps = {
   state: AnnotatorState
   onOpenImage: () => void
+  onDropImage: (file: File) => void
   onDrawStart: (x: number, y: number) => void
   onDrawMove: (x: number, y: number) => void
   onDrawEnd: () => void
 }
 
+function imageFileFromTransfer(transfer: DataTransfer): File | undefined {
+  return [...transfer.files].find((file) => file.type.startsWith("image/"))
+}
+
 export function BboxCanvas({
   state,
   onOpenImage,
+  onDropImage,
   onDrawStart,
   onDrawMove,
   onDrawEnd,
 }: BboxCanvasProps) {
   const surfaceRef = useRef<HTMLDivElement>(null)
+  const dragDepthRef = useRef(0)
+  const [isDraggingOver, setIsDraggingOver] = useState(false)
 
   const image = state.image
   const box = activeBoundingBox(state)
@@ -39,6 +47,39 @@ export function BboxCanvas({
       image.width,
       image.height,
     )
+  }
+
+  const handleDragEnter = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    dragDepthRef.current += 1
+    if (event.dataTransfer.types.includes("Files")) {
+      setIsDraggingOver(true)
+    }
+  }
+
+  const handleDragLeave = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    dragDepthRef.current -= 1
+    if (dragDepthRef.current <= 0) {
+      dragDepthRef.current = 0
+      setIsDraggingOver(false)
+    }
+  }
+
+  const handleDragOver = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    event.dataTransfer.dropEffect = "copy"
+  }
+
+  const handleDrop = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    dragDepthRef.current = 0
+    setIsDraggingOver(false)
+
+    const file = imageFileFromTransfer(event.dataTransfer)
+    if (file) {
+      onDropImage(file)
+    }
   }
 
   const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
@@ -71,7 +112,7 @@ export function BboxCanvas({
   }
 
   return (
-    <div className="relative w-full">
+    <div className="relative flex h-full min-h-0 w-full items-center justify-center">
       <div className="film-perf absolute inset-y-3 -left-3 w-2 rounded-l-sm opacity-70" />
       <div className="film-perf absolute inset-y-3 -right-3 w-2 rounded-r-sm opacity-70" />
 
@@ -80,18 +121,34 @@ export function BboxCanvas({
         className={cn(
           "relative border border-table-edge",
           image
-            ? "cursor-crosshair overflow-hidden bg-table-matte touch-none shadow-[inset_0_0_0_1px_rgb(255_255_255/0.03)]"
-            : "table-well min-h-[min(68vh,640px)]",
+            ? "inline-flex h-full max-w-full cursor-crosshair overflow-hidden bg-table-matte touch-none shadow-[inset_0_0_0_1px_rgb(255_255_255/0.03)]"
+            : "table-well h-full w-full",
+          isDraggingOver && "border-primary ring-2 ring-primary/30",
         )}
+        onDragEnter={handleDragEnter}
+        onDragLeave={handleDragLeave}
+        onDragOver={handleDragOver}
+        onDrop={handleDrop}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
       >
+        {isDraggingOver ? (
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-primary/10"
+          >
+            <span className="rounded-sm border border-primary/40 bg-background/80 px-4 py-2 font-mono text-xs tracking-[0.14em] text-primary uppercase">
+              Drop image
+            </span>
+          </div>
+        ) : null}
+
         {image ? (
           <>
             <img
               alt={image.name}
-              className="block h-auto w-full select-none"
+              className="block h-full max-w-full select-none object-contain"
               draggable={false}
               src={image.url}
             />
@@ -116,7 +173,7 @@ export function BboxCanvas({
           </>
         ) : (
           <button
-            className="flex min-h-[min(68vh,640px)] w-full flex-col items-center justify-center gap-5 overflow-visible px-8 text-center transition-colors hover:bg-white/[0.02] focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+            className="flex h-full w-full flex-col items-center justify-center gap-5 overflow-visible px-8 text-center transition-colors hover:bg-white/[0.02] focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
             onClick={onOpenImage}
             type="button"
           >
@@ -128,7 +185,8 @@ export function BboxCanvas({
                 Place an image on the table
               </span>
               <span className="text-sm leading-relaxed text-muted-foreground">
-                Click here or use Open image above. Then drag to mark a region.
+                Click, drag and drop, or use Open image above. Then drag to mark
+                a region.
               </span>
             </span>
           </button>

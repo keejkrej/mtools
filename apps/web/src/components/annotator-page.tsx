@@ -99,7 +99,7 @@ export function AnnotatorPage() {
         : "empty"
 
   return (
-    <div className="flex min-h-svh flex-col">
+    <div className="flex h-svh flex-col overflow-hidden">
       <input
         accept="image/*"
         className="sr-only"
@@ -111,7 +111,7 @@ export function AnnotatorPage() {
         type="file"
       />
 
-      <header className="sticky top-0 z-10 border-b border-border/80 bg-background/90 backdrop-blur-md">
+      <header className="z-10 shrink-0 border-b border-border/80 bg-background/90 backdrop-blur-md">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-5 py-4 sm:px-8">
           <div className="flex min-w-0 items-baseline gap-3">
             <h1 className="font-display text-xl leading-normal sm:text-2xl">
@@ -151,7 +151,7 @@ export function AnnotatorPage() {
         </div>
       </header>
 
-      <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-0 px-5 py-8 sm:px-8">
+      <main className="mx-auto flex min-h-0 w-full max-w-6xl flex-1 flex-col gap-0 px-5 py-6 sm:px-8">
         {state.error ? (
           <p
             className="mb-4 border border-destructive/30 bg-destructive/10 px-4 py-3 font-mono text-sm text-destructive"
@@ -183,13 +183,18 @@ export function AnnotatorPage() {
           </span>
         </div>
 
-        <BboxCanvas
-          onDrawEnd={() => dispatch({ type: "draw-end" })}
-          onDrawMove={(x, y) => dispatch({ type: "draw-move", x, y })}
-          onDrawStart={(x, y) => dispatch({ type: "draw-start", x, y })}
-          onOpenImage={openFilePicker}
-          state={state}
-        />
+        <div className="min-h-0 flex-1">
+          <BboxCanvas
+            onDrawEnd={() => dispatch({ type: "draw-end" })}
+            onDrawMove={(x, y) => dispatch({ type: "draw-move", x, y })}
+            onDrawStart={(x, y) => dispatch({ type: "draw-start", x, y })}
+            onDropImage={(file) => {
+              void handleOpenImage(file)
+            }}
+            onOpenImage={openFilePicker}
+            state={state}
+          />
+        </div>
 
         <div className="mt-0">
           <TimecodeStrip
@@ -207,7 +212,7 @@ export function AnnotatorPage() {
           />
         </div>
 
-        <p className="mt-6 text-center text-xs text-muted-foreground">
+        <p className="mt-4 shrink-0 text-center text-xs text-muted-foreground">
           Coordinates are in original image pixels — x, y, width, height.
           Session restores on reload within this tab.
         </p>
